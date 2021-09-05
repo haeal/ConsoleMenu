@@ -2,375 +2,396 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
+using System.Threading.Tasks;
 
 [assembly: InternalsVisibleTo("ConsoleMenuTests")]
 namespace ConsoleTools
 {
-  public class ConsoleMenu
-  {
-    private List<string> titles = new List<string>();
-    private readonly MenuConfig _config = new MenuConfig();
-    private readonly List<MenuItem> _menuItems = new List<MenuItem>();
-    private int? _selectedIndex;
-    private string? _selectedName;
-    private bool close;
-    private int currentItemIndex;
-    internal IConsole console = new SystemConsole();
+	public class ConsoleMenu
+	{
+		private readonly Func<ConsoleMenu, int> _checkForUpdate;
+		private List<string> titles = new List<string>();
+		private readonly MenuConfig _config = new MenuConfig();
+		private readonly List<MenuItem> _menuItems = new List<MenuItem>();
+		private int? _selectedIndex;
+		private string? _selectedName;
+		private bool close;
+		private int currentItemIndex;
+		internal IConsole console = new SystemConsole();
 
-    /// <summary>
-    /// Menu items that can be modified
-    /// </summary>
-    public IReadOnlyList<MenuItem> Items => _menuItems;
+		/// <summary>
+		/// Menu items that can be modified
+		/// </summary>
+		public IReadOnlyList<MenuItem> Items => _menuItems;
 
-    /// <summary>
-    /// Selected menu item that can be modified
-    /// </summary>
-    public MenuItem CurrentItem
-    {
-      get => _menuItems[currentItemIndex];
-      set => _menuItems[currentItemIndex] = value;
-    }
+		/// <summary>
+		/// Selected menu item that can be modified
+		/// </summary>
+		public MenuItem CurrentItem
+		{
+			get => _menuItems[currentItemIndex];
+			set => _menuItems[currentItemIndex] = value;
+		}
 
-    /// <summary>
-    /// Creates ConsoleMenu instance
-    /// </summary>
-    public ConsoleMenu() { }
+		/// <summary>
+		/// Creates ConsoleMenu instance
+		/// </summary>
+		public ConsoleMenu() { }
 
-    /// <summary>
-    /// Creates ConsoleMenu instance with possibility to pre-select items via console parameter
-    /// </summary>
-    /// <param name="args">args collection from Main</param>
-    /// <param name="level">Level of whole menu</param>
-    public ConsoleMenu(string[]? args, int level)
-    {
-      if (args == null)
-        throw new ArgumentNullException(nameof(args));
+		/// <summary>
+		/// Creates ConsoleMenu instance with possibility to pre-select items via console parameter
+		/// </summary>
+		/// <param name="args">args collection from Main</param>
+		/// <param name="level">Level of whole menu</param>
+		public ConsoleMenu(string[]? args, int level, Func<ConsoleMenu, int> checkForUpdate = null)
+		{
+			if (args == null)
+				throw new ArgumentNullException(nameof(args));
 
-      if (level < 0)
-      {
-        throw new ArgumentException("Cannot be below 0", nameof(level));
-      }
-      SetSeletedItems(args, level);
-      if (_config.Title != null)
-      {
-        this.titles.Add(_config.Title);
-      }
-    }
+			if (level < 0)
+			{
+				throw new ArgumentException("Cannot be below 0", nameof(level));
+			}
 
-    /// <summary>
-    /// Close the menu before or after a menu action was triggered
-    /// </summary>
-    public void CloseMenu()
-    {
-      this.close = true;
-    }
+			_checkForUpdate = checkForUpdate;
 
-    private void SetSeletedItems(string[] args, int level)
-    {
-      var arg = Array.Find(args, a => a.StartsWith(_config.ArgsPreselectedItemsKey));
-      SetSelectedItems(level, _config.ArgsPreselectedItemsKey, ref arg);
-    }
+			SetSeletedItems(args, level);
+			if (_config.Title != null)
+			{
+				this.titles.Add(_config.Title);
+			}
+		}
 
-    private void SetSelectedItems(int level, string paramKey, ref string arg)
-    {
-      if (arg == null)
-      {
-        return;
-      }
-      arg = arg.Replace(paramKey, string.Empty).Trim();
-      var items = arg.SplitItems(_config.ArgsPreselectedItemsValueSeparator, '\'');
-      if (level <= items.Count)
-      {
-        var item = items[level].Trim('\'');
-        if (int.TryParse(item, out var selectedIndex))
-        {
-          _selectedIndex = selectedIndex;
-          return;
-        }
-        _selectedName = item;
-      }
-    }
+		/// <summary>
+		/// Close the menu before or after a menu action was triggered
+		/// </summary>
+		public void CloseMenu()
+		{
+			this.close = true;
+		}
 
-    public ConsoleMenu Add(string? name, Action? action)
-    {
-      if (name == null)
-        throw new ArgumentNullException(nameof(name));
+		private void SetSeletedItems(string[] args, int level)
+		{
+			var arg = Array.Find(args, a => a.StartsWith(_config.ArgsPreselectedItemsKey));
+			SetSelectedItems(level, _config.ArgsPreselectedItemsKey, ref arg);
+		}
 
-      if (action == null)
-        throw new ArgumentNullException(nameof(action));
+		private void SetSelectedItems(int level, string paramKey, ref string arg)
+		{
+			if (arg == null)
+			{
+				return;
+			}
+			arg = arg.Replace(paramKey, string.Empty).Trim();
+			var items = arg.SplitItems(_config.ArgsPreselectedItemsValueSeparator, '\'');
+			if (level <= items.Count)
+			{
+				var item = items[level].Trim('\'');
+				if (int.TryParse(item, out var selectedIndex))
+				{
+					_selectedIndex = selectedIndex;
+					return;
+				}
+				_selectedName = item;
+			}
+		}
 
-      if (action.Target is ConsoleMenu child && action == child.Show)
-      {
-        var list = new List<string>();
-        list.AddRange(this.titles);
-        list.AddRange(child.titles);
-        child.titles = list;
-      }
-      _menuItems.Add(new MenuItem(name, action, index: _menuItems.Count));
-      return this;
-    }
+		public ConsoleMenu Add(string? name, Action? action)
+		{
+			if (name == null)
+				throw new ArgumentNullException(nameof(name));
 
-    public ConsoleMenu Add(string? name, Action<ConsoleMenu>? action)
-    {
-      if (name == null)
-        throw new ArgumentNullException(nameof(name));
+			if (action == null)
+				throw new ArgumentNullException(nameof(action));
 
-      if (action is null)
-        throw new ArgumentNullException(nameof(action));
+			if (action.Target is ConsoleMenu child && action == child.Show)
+			{
+				var list = new List<string>();
+				list.AddRange(this.titles);
+				list.AddRange(child.titles);
+				child.titles = list;
+			}
+			_menuItems.Add(new MenuItem(name, action, index: _menuItems.Count));
+			return this;
+		}
 
-      _menuItems.Add(new MenuItem(name, () => action(this), index: _menuItems.Count));
-      return this;
-    }
+		public ConsoleMenu Add(string? name, Action<ConsoleMenu>? action)
+		{
+			if (name == null)
+				throw new ArgumentNullException(nameof(name));
 
-    public ConsoleMenu AddRange(IEnumerable<Tuple<string, Action>>? menuItems)
-    {
-      if (menuItems == null)
-        throw new ArgumentNullException(nameof(menuItems));
+			if (action is null)
+				throw new ArgumentNullException(nameof(action));
 
-      foreach (var item in menuItems)
-      {
-        Add(item.Item1, item.Item2);
-      }
-      return this;
-    }
+			_menuItems.Add(new MenuItem(name, () => action(this), index: _menuItems.Count));
+			return this;
+		}
 
-    public ConsoleMenu Configure(Action<MenuConfig>? configure)
-    {
-      if (configure is null)
-        throw new ArgumentNullException(nameof(configure));
+		public ConsoleMenu AddRange(IEnumerable<Tuple<string, Action>>? menuItems)
+		{
+			if (menuItems == null)
+				throw new ArgumentNullException(nameof(menuItems));
 
-      configure?.Invoke(_config);
-      return this;
-    }
+			foreach (var item in menuItems)
+			{
+				Add(item.Item1, item.Item2);
+			}
+			return this;
+		}
 
-    /// <summary>
-    /// Don't run this method directly. Just pass a reference to this method.
-    /// </summary>
-    public static void Close() => throw new InvalidOperationException("Don't run this method directly. Just pass a reference to this method.");
+		public ConsoleMenu Configure(Action<MenuConfig>? configure)
+		{
+			if (configure is null)
+				throw new ArgumentNullException(nameof(configure));
 
-    public void Show()
-    {
-      var selectedItem = GetSeletedItem();
-      if(selectedItem != null)
-      {
-        selectedItem.Action.Invoke();
-        return;
-      }
-      ConsoleKeyInfo key;
-      bool[] visibility = CreateVisibility(); //true means visible
-      this.currentItemIndex = 0;
-      var currentForegroundColor = this.console.ForegroundColor;
-      var currentBackgroundColor = this.console.BackgroundColor;
-      bool breakIteration = false;
-      var filter = new StringBuilder();
+			configure?.Invoke(_config);
+			return this;
+		}
 
-      while (true)
-      {
-        do
-        {
-          redraw:
-          if (_config.ClearConsole)
-          {
-            this.console.Clear();
-          }
-          if (_config.EnableBreadcrumb)
-          {
-            _config.WriteBreadcrumbAction(this.titles);
-          }
-          if (_config.EnableWriteTitle)
-          {
-            _config.WriteTitleAction(_config.Title);
-          }
-          _config.WriteHeaderAction();
+		/// <summary>
+		/// Don't run this method directly. Just pass a reference to this method.
+		/// </summary>
+		public static void Close() => throw new InvalidOperationException("Don't run this method directly. Just pass a reference to this method.");
 
-          int i = 0;
-          foreach (var menuItem in _menuItems)
-          {
-            if (_config.EnableFilter && !visibility[i])
-            {
-              currentItemIndex = SetAnotherCurItem(visibility, currentItemIndex, out var shouldRedraw);
-              if (shouldRedraw)
-              {
-                goto redraw;
-              }
-              i++;
-              continue;
-            }
-            if (currentItemIndex == i)
-            {
-              this.console.BackgroundColor = _config.SelectedItemBackgroundColor;
-              this.console.ForegroundColor = _config.SelectedItemForegroundColor;
-              this.console.Write(_config.Selector);
-              _config.WriteItemAction(menuItem);
-              this.console.WriteLine();
-              this.console.BackgroundColor = _config.ItemBackgroundColor;
-              this.console.ForegroundColor = _config.ItemForegroundColor;
-            }
-            else
-            {
-              this.console.BackgroundColor = _config.ItemBackgroundColor;
-              this.console.ForegroundColor = _config.ItemForegroundColor;
-              this.console.Write(new string(' ', _config.Selector.Length));
-              _config.WriteItemAction(menuItem);
-              this.console.WriteLine();
-            }
-            i++;
-          }
+		public void Show()
+		{
+			var selectedItem = GetSeletedItem();
+			if (selectedItem != null)
+			{
+				selectedItem.Action.Invoke();
+				return;
+			}
+			ConsoleKeyInfo key;
+			bool[] visibility = CreateVisibility(); //true means visible
+			this.currentItemIndex = 0;
+			var currentForegroundColor = this.console.ForegroundColor;
+			var currentBackgroundColor = this.console.BackgroundColor;
+			bool breakIteration = false;
+			var filter = new StringBuilder();
+			int sleepCount = 0;
+			int sleepTotal = 0;
 
-          if (breakIteration)
-          {
-            breakIteration = false;
-            break;
-          }
+			while (true)
+			{
+				do
+				{
+				redraw:
+					if (_config.ClearConsole)
+					{
+						this.console.Clear();
+					}
+					if (_config.EnableBreadcrumb)
+					{
+						_config.WriteBreadcrumbAction(this.titles);
+					}
+					if (_config.EnableWriteTitle)
+					{
+						_config.WriteTitleAction(_config.Title);
+					}
+					_config.WriteHeaderAction();
 
-          if (_config.EnableFilter)
-          {
-            this.console.Write(_config.FilterPrompt + filter);
-          }
+					int i = 0;
+					foreach (var menuItem in _menuItems)
+					{
+						if (_config.EnableFilter && !visibility[i])
+						{
+							currentItemIndex = SetAnotherCurItem(visibility, currentItemIndex, out var shouldRedraw);
+							if (shouldRedraw)
+							{
+								goto redraw;
+							}
+							i++;
+							continue;
+						}
+						if (currentItemIndex == i)
+						{
+							this.console.BackgroundColor = _config.SelectedItemBackgroundColor;
+							this.console.ForegroundColor = _config.SelectedItemForegroundColor;
+							this.console.Write(_config.Selector);
+							_config.WriteItemAction(menuItem);
+							this.console.WriteLine();
+							this.console.BackgroundColor = _config.ItemBackgroundColor;
+							this.console.ForegroundColor = _config.ItemForegroundColor;
+						}
+						else
+						{
+							this.console.BackgroundColor = _config.ItemBackgroundColor;
+							this.console.ForegroundColor = _config.ItemForegroundColor;
+							this.console.Write(new string(' ', _config.Selector.Length));
+							_config.WriteItemAction(menuItem);
+							this.console.WriteLine();
+						}
+						i++;
+					}
 
-          readKey:
-          key = this.console.ReadKey(true);
+					if (breakIteration)
+					{
+						breakIteration = false;
+						break;
+					}
 
-          if (key.Key == ConsoleKey.DownArrow)
-          {
-            currentItemIndex = IndexOfNextVisibleItem(currentItemIndex, visibility);
-          }
-          else if (key.Key == ConsoleKey.UpArrow)
-          {
-            currentItemIndex = IndexOfPreviousVisibleItem(currentItemIndex, visibility);
-          }
-          else if (key.KeyChar >= '0' && (key.KeyChar - '0') < _menuItems.Count)
-          {
-            currentItemIndex = key.KeyChar - '0';
-            breakIteration = true;
-          }
-          else if (key.Key != ConsoleKey.Enter)
-          {
-            if (_config.EnableFilter)
-            {
-              if (key.Key == ConsoleKey.Backspace)
-              {
-                if (filter.Length > 0)
-                {
-                  filter.Length--;
-                }
-              }
-              else if(!char.IsControl(key.KeyChar))
-              {
-                filter.Append(key.KeyChar);
-              }
-              UpdateVisibility(_menuItems, visibility,
-                (item) => item.Name.Contains(filter.ToString(), StringComparison.OrdinalIgnoreCase));
-            }
-            else
-            {
-              goto readKey;
-            }
-          }
-        } while (key.Key != ConsoleKey.Enter);
+					if (_config.EnableFilter)
+					{
+						this.console.Write(_config.FilterPrompt + filter);
+					}
 
-        this.console.WriteLine();
-        this.console.ForegroundColor = currentForegroundColor;
-        this.console.BackgroundColor = currentBackgroundColor;
-        var action = _menuItems[currentItemIndex].Action;
-        if (action == Close)
-        {
-          return;
-        }
-        else
-        {
-          action?.Invoke();
-          if (this.close)
-          {
-            this.close = false;
-            return;
-          }
-        }
-      }
-    }
+				readKey:
+					while (_checkForUpdate != null && !Console.KeyAvailable)
+					{
+						Task.Delay(100).Wait();
+						sleepCount++;
+						if (sleepCount < sleepTotal) continue;
+						
+						sleepTotal = (_checkForUpdate?.Invoke(this) ?? 1) * 10;
+						sleepCount = 0;
+						if (sleepTotal >= 0) continue;
+						
+						sleepTotal = -sleepTotal;
+						goto redraw;
+					}
 
-    private MenuItem? GetSeletedItem()
-    {
-      if(_selectedIndex.HasValue && _selectedIndex.Value < _menuItems.Count)
-      {
-        return _menuItems[_selectedIndex.Value];
-      }
-      if(_selectedName != null)
-      {
-        return _menuItems.Find(item => item.Name == _selectedName);
-      }
-      return null;
-    }
+					key = this.console.ReadKey(true);
 
-    private int IndexOfNextVisibleItem(int curItem, bool[] visibility)
-    {
-      int idx = -1;
-      if(curItem + 1 < visibility.Length)
-      {
-        idx = Array.IndexOf(visibility, value: true, startIndex: curItem + 1);
-      }
-      if (idx == -1)
-      {
-        idx = Array.IndexOf(visibility, value: true, startIndex: 0);
-      }
-      if(idx == -1)
-      {
-        idx = curItem;
-      }
-      return idx;
-    }
+					if (key.Key == ConsoleKey.DownArrow)
+					{
+						currentItemIndex = IndexOfNextVisibleItem(currentItemIndex, visibility);
+					}
+					else if (key.Key == ConsoleKey.UpArrow)
+					{
+						currentItemIndex = IndexOfPreviousVisibleItem(currentItemIndex, visibility);
+					}
+					else if (key.KeyChar >= '0' && (key.KeyChar - '0') < _menuItems.Count)
+					{
+						currentItemIndex = key.KeyChar - '0';
+						breakIteration = true;
+					}
+					else if (key.Key != ConsoleKey.Enter)
+					{
+						if (_config.EnableFilter)
+						{
+							if (key.Key == ConsoleKey.Backspace)
+							{
+								if (filter.Length > 0)
+								{
+									filter.Length--;
+								}
+							}
+							else if (!char.IsControl(key.KeyChar))
+							{
+								filter.Append(key.KeyChar);
+							}
+							UpdateVisibility(_menuItems, visibility,
+							  (item) => item.Name.Contains(filter.ToString(), StringComparison.OrdinalIgnoreCase));
+						}
+						else
+						{
+							goto readKey;
+						}
+					}
+				} while (key.Key != ConsoleKey.Enter);
 
-    private int IndexOfPreviousVisibleItem(int curItem, bool[] visibility)
-    {
-      int idx = -1;
-      if(curItem - 1 >= 0)
-      {
-        idx = Array.LastIndexOf(visibility, value: true, startIndex: curItem - 1);
-      }
-      if (idx == -1)
-      {
-        idx = Array.LastIndexOf(visibility, value: true, startIndex: visibility.Length - 1);
-      }
-      if (idx == -1)
-      {
-        idx = curItem;
-      }
-      return idx;
-    }
+				this.console.WriteLine();
+				this.console.ForegroundColor = currentForegroundColor;
+				this.console.BackgroundColor = currentBackgroundColor;
+				var action = _menuItems[currentItemIndex].Action;
+				if (action == Close)
+				{
+					return;
+				}
+				else
+				{
+					action?.Invoke();
+					if (this.close)
+					{
+						this.close = false;
+						return;
+					}
+				}
+			}
+		}
 
-    private static int SetAnotherCurItem(bool[] visibility, int curItem, out bool shouldRedraw)
-    {
-      shouldRedraw = false;
-      var foundIdx = Array.IndexOf(visibility, true, curItem);
-      if (foundIdx != -1)
-      {
-        return foundIdx;
-      }
-      foundIdx = Array.LastIndexOf(visibility, true, curItem);
-      if (foundIdx != -1)
-      {
-        shouldRedraw = true;
-        return foundIdx;
-      }
-      return foundIdx == -1 ? 0 : foundIdx;
-    }
+		private MenuItem? GetSeletedItem()
+		{
+			if (_selectedIndex.HasValue && _selectedIndex.Value < _menuItems.Count)
+			{
+				return _menuItems[_selectedIndex.Value];
+			}
+			if (_selectedName != null)
+			{
+				return _menuItems.Find(item => item.Name == _selectedName);
+			}
+			return null;
+		}
 
-    private bool[] CreateVisibility()
-    {
-      bool[] visibility = new bool[_menuItems.Count];
-      for (int i = 0; i < visibility.Length; i++)
-      {
-        visibility[i] = true;
-      }
-      return visibility;
-    }
+		private int IndexOfNextVisibleItem(int curItem, bool[] visibility)
+		{
+			int idx = -1;
+			if (curItem + 1 < visibility.Length)
+			{
+				idx = Array.IndexOf(visibility, value: true, startIndex: curItem + 1);
+			}
+			if (idx == -1)
+			{
+				idx = Array.IndexOf(visibility, value: true, startIndex: 0);
+			}
+			if (idx == -1)
+			{
+				idx = curItem;
+			}
+			return idx;
+		}
 
-    private static void UpdateVisibility<T>(List<T> items, bool[] visibility, Predicate<T> matchFilter)
-    {
-      for (int i = 0; i < visibility.Length; i++)
-      {
-        visibility[i] = matchFilter(items[i]);
-      }
-    }
-  }
+		private int IndexOfPreviousVisibleItem(int curItem, bool[] visibility)
+		{
+			int idx = -1;
+			if (curItem - 1 >= 0)
+			{
+				idx = Array.LastIndexOf(visibility, value: true, startIndex: curItem - 1);
+			}
+			if (idx == -1)
+			{
+				idx = Array.LastIndexOf(visibility, value: true, startIndex: visibility.Length - 1);
+			}
+			if (idx == -1)
+			{
+				idx = curItem;
+			}
+			return idx;
+		}
+
+		private static int SetAnotherCurItem(bool[] visibility, int curItem, out bool shouldRedraw)
+		{
+			shouldRedraw = false;
+			var foundIdx = Array.IndexOf(visibility, true, curItem);
+			if (foundIdx != -1)
+			{
+				return foundIdx;
+			}
+			foundIdx = Array.LastIndexOf(visibility, true, curItem);
+			if (foundIdx != -1)
+			{
+				shouldRedraw = true;
+				return foundIdx;
+			}
+			return foundIdx == -1 ? 0 : foundIdx;
+		}
+
+		private bool[] CreateVisibility()
+		{
+			bool[] visibility = new bool[_menuItems.Count];
+			for (int i = 0; i < visibility.Length; i++)
+			{
+				visibility[i] = true;
+			}
+			return visibility;
+		}
+
+		private static void UpdateVisibility<T>(List<T> items, bool[] visibility, Predicate<T> matchFilter)
+		{
+			for (int i = 0; i < visibility.Length; i++)
+			{
+				visibility[i] = matchFilter(items[i]);
+			}
+		}
+	}
 }
